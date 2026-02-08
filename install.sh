@@ -18,6 +18,10 @@ REPO="guyfar/ssh-manager"
 BRANCH="main"
 RAW_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
 INSTALL_DIR="/usr/local/bin"
+# Apple Silicon Mac 优先用 /opt/homebrew/bin
+if [[ -d "/opt/homebrew/bin" ]]; then
+    INSTALL_DIR="/opt/homebrew/bin"
+fi
 
 echo -e "${BOLD}${CYAN}SSH Server Manager - 安装程序${NC}"
 echo ""
@@ -52,8 +56,8 @@ else
 fi
 echo -e "${GREEN}  ✓ 主脚本已安装${NC}"
 
-# --- Step 2: 检查 fzf ---
-echo -e "${DIM}[2/3] 检查 fzf ...${NC}"
+# --- Step 2: 检查 fzf 和 sshpass ---
+echo -e "${DIM}[2/4] 检查 fzf ...${NC}"
 if command -v fzf &>/dev/null; then
     echo -e "${GREEN}  ✓ fzf 已安装${NC}"
 else
@@ -70,8 +74,24 @@ else
     fi
 fi
 
-# --- Step 3: 初始化配置 ---
-echo -e "${DIM}[3/3] 初始化配置 ...${NC}"
+# --- Step 3: 检查 sshpass ---
+echo -e "${DIM}[3/4] 检查 sshpass ...${NC}"
+if command -v sshpass &>/dev/null; then
+    echo -e "${GREEN}  ✓ sshpass 已安装${NC}"
+else
+    echo -e "${YELLOW}  sshpass 未安装(密码登录需要)${NC}"
+    if command -v brew &>/dev/null; then
+        read -rp "  是否自动安装 sshpass? [Y/n]: " install_sshpass
+        if [[ ! "$install_sshpass" =~ ^[nN] ]]; then
+            brew install hudochenkov/sshpass/sshpass 2>/dev/null || \
+            brew install esolitos/ipa/sshpass 2>/dev/null || \
+            echo -e "${YELLOW}  自动安装失败，请手动安装${NC}"
+        fi
+    fi
+fi
+
+# --- Step 4: 初始化配置 ---
+echo -e "${DIM}[4/4] 初始化配置 ...${NC}"
 mkdir -p "$HOME/.ssh-manager"
 if [[ ! -f "$HOME/.ssh-manager/servers.conf" ]]; then
     cp "$TMP_DIR/servers.conf.example" "$HOME/.ssh-manager/servers.conf"
@@ -79,6 +99,7 @@ if [[ ! -f "$HOME/.ssh-manager/servers.conf" ]]; then
 else
     echo -e "${GREEN}  ✓ 配置文件已存在(保留原有配置)${NC}"
 fi
+chmod 600 "$HOME/.ssh-manager/servers.conf"
 
 echo ""
 echo -e "${GREEN}${BOLD}✓ 安装完成!${NC}"

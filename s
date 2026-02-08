@@ -31,13 +31,14 @@ init() {
 # ============================================
 # SSH Server Manager - 服务器配置文件
 # ============================================
-# 格式: 名称 | IP地址 | 端口 | 用户名 | 备注说明
+# 格式: 名称 | IP地址 | 端口 | 用户名 | 密码(可选) | 备注说明
 # 分组: 以 [分组名] 开头的行表示分组
 # 注释: 以 # 开头的行为注释
+# 密码留空则使用SSH Key登录
 # ============================================
 
 [默认分组]
-# example | 192.168.1.1 | 22 | root | 示例服务器(请修改)
+# example | 192.168.1.1 | 22 | root | yourpass | 示例服务器
 CONF
         echo -e "${YELLOW}首次运行，已创建配置文件: ${CONFIG_FILE}${NC}"
         echo -e "${YELLOW}请先添加服务器: s add${NC}"
@@ -74,17 +75,18 @@ parse_servers() {
             group="${BASH_REMATCH[1]}"
             continue
         fi
-        # 解析服务器行: 名称 | IP | 端口 | 用户名 | 备注
-        IFS='|' read -r name host port user desc <<< "$line"
+        # 解析服务器行: 名称 | IP | 端口 | 用户名 | 密码 | 备注
+        IFS='|' read -r name host port user pass desc <<< "$line"
         name=$(echo "$name" | xargs)
         host=$(echo "$host" | xargs)
         port=$(echo "$port" | xargs)
         user=$(echo "$user" | xargs)
-        desc=$(echo "$desc" | xargs)
+        pass=$(echo "$pass" | xargs 2>/dev/null || echo "")
+        desc=$(echo "$desc" | xargs 2>/dev/null || echo "")
         [[ -z "$name" || -z "$host" ]] && continue
         port=${port:-22}
         user=${user:-root}
-        echo "${group}|${name}|${host}|${port}|${user}|${desc}"
+        echo "${group}|${name}|${host}|${port}|${user}|${pass}|${desc}"
     done < "$CONFIG_FILE"
 }
 
@@ -109,14 +111,16 @@ get_history_rank() {
 
 # --- SSH连接服务器 ---
 connect_server() {
-    local host="$1" port="$2" user="$3" name="$4"
+    local host="$1" port="$2" user="$3" name="$4" pass="${5:-}"
     record_history "$name"
     echo -e "${GREEN}▶ 正在连接: ${BOLD}${name}${NC} ${DIM}(${user}@${host}:${port})${NC}"
     echo ""
-    ssh -o ConnectTimeout=10 \
-        -o ServerAliveInterval=60 \
-        -o ServerAliveCountMax=3 \
-        -p "$port" "${user}@${host}"
+    local ssh_opts=(-o ConnectTimeout=10 -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new -p "$port")
+    if [[ -n "$pass" ]] && command -v sshpass &>/dev/null; then
+        sshpass -p "$pass" ssh "${ssh_opts[@]}" "${user}@${host}"
+    else
+        ssh "${ssh_opts[@]}" "${user}@${host}"
+    fi
 }
 
 # --- 使用fzf交互选择 ---
@@ -128,7 +132,7 @@ select_with_fzf() {
 
     local fzf_input=""
     local current_group=""
-    while IFS='|' read -r group name host port user desc; do
+    while IFS='|' read -r group name host port user pass desc; do
         if [[ "$current_group" != "$group" ]]; then
             [[ -n "$current_group" ]] && fzf_input+=$'\n'
             current_group="$group"
@@ -155,9 +159,9 @@ select_with_fzf() {
     [[ -z "$selected" ]] && return 1
     local sel_name
     sel_name=$(echo "$selected" | awk '{print $1}')
-    echo "$servers" | while IFS='|' read -r group name host port user desc; do
+    echo "$servers" | while IFS='|' read -r group name host port user pass desc; do
         if [[ "$name" == "$sel_name" ]]; then
-            echo "${name}|${host}|${port}|${user}"
+            echo "${name}|${host}|${port}|${user}|${pass}"
             return 0
         fi
     done
@@ -173,9 +177,9 @@ select_fallback() {
     echo -e "${BOLD}${CYAN}🖥  SSH Server Manager${NC}"
     echo ""
 
-    local -a names=() hosts=() ports=() users=()
+    local -a names=() hosts=() ports=() users=() passes=()
     local current_group="" idx=0
-    while IFS='|' read -r group name host port user desc; do
+    while IFS='|' read -r group name host port user pass desc; do
         if [[ "$current_group" != "$group" ]]; then
             current_group="$group"
             echo -e "  ${PURPLE}${BOLD}[$group]${NC}"
@@ -189,8 +193,11 @@ select_fallback() {
         hosts+=("$host")
         ports+=("$port")
         users+=("$user")
-        printf "  ${GREEN}%3d)${NC} %-18s ${DIM}%-16s %-6s %-8s${NC} %s\n" \
-            "$idx" "$name" "$host" ":$port" "$user" "$desc"
+        passes+=("$pass")
+        local auth_icon="🔑"
+        [[ -n "$pass" ]] && auth_icon="🔒"
+        printf "  ${GREEN}%3d)${NC} %-18s ${DIM}%-16s %-6s %-8s${NC} %s %s\n" \
+            "$idx" "$name" "$host" ":$port" "$user" "$auth_icon" "$desc"
     done <<< "$servers"
 
     [[ $idx -eq 0 ]] && echo -e "${RED}✗ 没有匹配的服务器${NC}" && return 1
@@ -198,7 +205,7 @@ select_fallback() {
     read -rp "$(echo -e "${BOLD}请选择 [1-${idx}]: ${NC}")" choice
     if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= idx )); then
         local i=$((choice - 1))
-        echo "${names[$i]}|${hosts[$i]}|${ports[$i]}|${users[$i]}"
+        echo "${names[$i]}|${hosts[$i]}|${ports[$i]}|${users[$i]}|${passes[$i]}"
     else
         echo -e "${RED}✗ 无效选择${NC}" && return 1
     fi
@@ -216,6 +223,8 @@ cmd_add() {
     port=${port:-22}
     read -rp "$(echo -e "${BOLD}用户名 [root]: ${NC}")" user
     user=${user:-root}
+    read -rsp "$(echo -e "${BOLD}密码 (直接回车跳过,用Key登录): ${NC}")" pass
+    echo ""
     read -rp "$(echo -e "${BOLD}备注说明: ${NC}")" desc
 
     # 选择分组
@@ -252,7 +261,7 @@ cmd_add() {
 
     # 写入配置 - 在对应分组下追加
     local entry
-    printf -v entry "%-14s| %-16s| %-5s| %-7s| %s" "$name" "$host" "$port" "$user" "$desc"
+    printf -v entry "%-14s| %-16s| %-5s| %-7s| %s | %s" "$name" "$host" "$port" "$user" "$pass" "$desc"
     # 找到分组行号，在其后追加
     local group_line
     group_line=$(grep -n "^\[${group}\]" "$CONFIG_FILE" | tail -1 | cut -d: -f1)
@@ -271,7 +280,7 @@ ${entry}
     echo ""
     read -rp "$(echo -e "${BOLD}是否配置SSH免密登录? [y/N]: ${NC}")" setup_key
     if [[ "$setup_key" =~ ^[yY] ]]; then
-        setup_ssh_key "$host" "$port" "$user"
+        setup_ssh_key "$host" "$port" "$user" "$pass"
     fi
 }
 
@@ -307,14 +316,16 @@ cmd_list() {
     echo -e "${BOLD}${CYAN}🖥  服务器列表${NC}"
     echo ""
     local current_group="" idx=0
-    while IFS='|' read -r group name host port user desc; do
+    while IFS='|' read -r group name host port user pass desc; do
         if [[ "$current_group" != "$group" ]]; then
             current_group="$group"
             echo -e "  ${PURPLE}${BOLD}[$group]${NC}"
         fi
         idx=$((idx + 1))
-        printf "    ${GREEN}%-18s${NC} ${DIM}%-16s :%-5s %-8s${NC} %s\n" \
-            "$name" "$host" "$port" "$user" "$desc"
+        local auth_icon="🔑"
+        [[ -n "$pass" ]] && auth_icon="🔒"
+        printf "    ${GREEN}%-18s${NC} ${DIM}%-16s :%-5s %-8s${NC} %s %s\n" \
+            "$name" "$host" "$port" "$user" "$auth_icon" "$desc"
     done <<< "$servers"
     echo ""
     echo -e "  ${DIM}共 ${idx} 台服务器${NC}"
@@ -329,7 +340,7 @@ cmd_edit() {
 
 # --- 配置SSH免密登录 ---
 setup_ssh_key() {
-    local host="$1" port="$2" user="$3"
+    local host="$1" port="$2" user="$3" pass="${4:-}"
     local key_file="$HOME/.ssh/id_rsa.pub"
 
     if [[ ! -f "$key_file" ]]; then
@@ -343,9 +354,15 @@ setup_ssh_key() {
     fi
 
     echo -e "${DIM}正在将公钥推送到 ${user}@${host}:${port} ...${NC}"
-    ssh-copy-id -i "$key_file" -p "$port" "${user}@${host}" 2>/dev/null && \
-        echo -e "${GREEN}✓ SSH免密登录配置成功!${NC}" || \
-        echo -e "${RED}✗ 配置失败，请检查连接或手动配置${NC}"
+    if [[ -n "$pass" ]] && command -v sshpass &>/dev/null; then
+        sshpass -p "$pass" ssh-copy-id -o StrictHostKeyChecking=accept-new -i "$key_file" -p "$port" "${user}@${host}" 2>/dev/null && \
+            echo -e "${GREEN}✓ SSH免密登录配置成功!${NC}" || \
+            echo -e "${RED}✗ 配置失败，请检查连接或密码${NC}"
+    else
+        ssh-copy-id -i "$key_file" -p "$port" "${user}@${host}" 2>/dev/null && \
+            echo -e "${GREEN}✓ SSH免密登录配置成功!${NC}" || \
+            echo -e "${RED}✗ 配置失败，请检查连接或手动配置${NC}"
+    fi
 }
 
 # --- 为选中服务器配置免密 ---
@@ -361,9 +378,9 @@ cmd_key() {
     fi
     [[ -z "$result" ]] && return 1
 
-    local name host port user
-    IFS='|' read -r name host port user <<< "$result"
-    setup_ssh_key "$host" "$port" "$user"
+    local name host port user pass
+    IFS='|' read -r name host port user pass <<< "$result"
+    setup_ssh_key "$host" "$port" "$user" "$pass"
 }
 
 # --- 检测服务器连通性 ---
@@ -375,7 +392,7 @@ cmd_ping() {
     echo -e "${BOLD}${CYAN}🔍 服务器连通性检测${NC}"
     echo ""
 
-    while IFS='|' read -r group name host port user desc; do
+    while IFS='|' read -r group name host port user pass desc; do
         printf "  %-18s %-16s " "$name" "$host"
         if nc -z -w 3 "$host" "$port" 2>/dev/null; then
             echo -e "${GREEN}✓ 在线${NC}"
@@ -420,9 +437,9 @@ main() {
                 result=$(select_fallback "")
             fi
             [[ -z "$result" ]] && exit 0
-            local name host port user
-            IFS='|' read -r name host port user <<< "$result"
-            connect_server "$host" "$port" "$user" "$name"
+            local name host port user pass
+            IFS='|' read -r name host port user pass <<< "$result"
+            connect_server "$host" "$port" "$user" "$name" "$pass"
             ;;
         *)
             # 有参数：作为关键词搜索
@@ -433,9 +450,9 @@ main() {
                 result=$(select_fallback "$1")
             fi
             [[ -z "$result" ]] && exit 0
-            local name host port user
-            IFS='|' read -r name host port user <<< "$result"
-            connect_server "$host" "$port" "$user" "$name"
+            local name host port user pass
+            IFS='|' read -r name host port user pass <<< "$result"
+            connect_server "$host" "$port" "$user" "$name" "$pass"
             ;;
     esac
 }
