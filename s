@@ -130,35 +130,39 @@ select_with_fzf() {
     servers=$(parse_servers)
     [[ -z "$servers" ]] && echo -e "${RED}✗ 没有配置任何服务器，请先运行: s add${NC}" && return 1
 
-    local fzf_input=""
-    local current_group=""
+    local fzf_input="" idx=0
     while IFS='|' read -r group name host port user pass desc; do
-        if [[ "$current_group" != "$group" ]]; then
-            [[ -n "$current_group" ]] && fzf_input+=$'\n'
-            current_group="$group"
-        fi
-        local rank
-        rank=$(get_history_rank "$name")
-        printf -v line "%-4s %-18s %-16s %-6s %-10s [%s] %s" \
-            "$rank" "$name" "$host" "$port" "$user" "$group" "$desc"
+        idx=$((idx + 1))
+        local auth="key"
+        [[ -n "$pass" ]] && auth="pwd"
+        printf -v line " %2d  %-16s  %-16s  %-5s  %-6s  %-4s  %s" \
+            "$idx" "$name" "$host" "$port" "$user" "$auth" "$desc"
         fzf_input+="${line}"$'\n'
     done <<< "$servers"
 
+    local header
+    printf -v header " %-3s  %-16s  %-16s  %-5s  %-6s  %-4s  %s" \
+        "#" "名称" "IP地址" "端口" "用户" "认证" "备注"
+
     local selected
-    selected=$(echo "$fzf_input" | sort -t' ' -k1 -n | \
-        sed 's/^[0-9 ]*//' | \
+    selected=$(printf '%s' "$fzf_input" | \
         fzf --ansi \
-            --header="🖥  SSH Server Manager - 选择服务器 (ESC退出)" \
-            --prompt="搜索: " \
+            --header="$header" \
+            --prompt=" 搜索: " \
             --height=~50% \
             --border=rounded \
+            --border-label=" SSH Server Manager " \
+            --border-label-pos=3 \
             --query="$filter" \
             --preview-window=hidden \
+            --pointer="▶" \
+            --marker="●" \
+            --color=header:italic \
         2>/dev/null) || return 1
 
     [[ -z "$selected" ]] && return 1
     local sel_name
-    sel_name=$(echo "$selected" | awk '{print $1}')
+    sel_name=$(echo "$selected" | awk '{print $2}')
     echo "$servers" | while IFS='|' read -r group name host port user pass desc; do
         if [[ "$name" == "$sel_name" ]]; then
             echo "${name}|${host}|${port}|${user}|${pass}"

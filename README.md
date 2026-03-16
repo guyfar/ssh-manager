@@ -10,6 +10,8 @@
 curl -fsSL https://raw.githubusercontent.com/guyfar/ssh-manager/main/install.sh | bash
 ```
 
+安装脚本首次只会创建一个空的 `~/.ssh-manager/servers.conf` 模板，不会预置演示服务器记录。
+
 ## 效果预览
 
 ```
@@ -42,20 +44,15 @@ $ s
 
 ## 配置文件
 
-配置文件位于 `~/.ssh-manager/servers.conf`，格式如下：
+配置文件位于 `~/.ssh-manager/servers.conf`，首次安装时会创建一个空模板，格式如下：
 
 ```conf
-# 格式: 名称 | IP地址 | 端口 | 用户名 | 备注说明
+# 格式: 名称 | IP地址 | 端口 | 用户名 | 密码(可选) | 备注说明
 
-[生产环境]
-prod-web-01   | 1.2.3.4     | 22   | root   | 生产Web服务器1
-prod-db-01    | 1.2.3.6     | 3306 | root   | 生产数据库主库
-
-[测试环境]
-test-api      | 10.0.0.1    | 22   | ubuntu | 测试API服务器
-
-[海外节点]
-us-node-01    | 8.8.8.1     | 22   | admin  | 美国节点1
+[默认分组]
+# prod-web-01   | 1.2.3.4     | 22   | root   | yourpass  | 生产Web服务器1
+# prod-web-02   | 1.2.3.5     | 22   | root   |           | 生产Web服务器2(Key登录)
+# prod-db-01    | 1.2.3.6     | 3306 | root   | dbpass123 | 生产数据库主库
 ```
 
 ## 免密登录

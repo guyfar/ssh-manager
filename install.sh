@@ -33,18 +33,16 @@ if [[ -f "$(dirname "$0")/s" ]] 2>/dev/null; then
 fi
 
 # --- Step 1: 安装主脚本 ---
-echo -e "${DIM}[1/3] 安装主脚本到 ${INSTALL_DIR}/s ...${NC}"
+echo -e "${DIM}[1/4] 安装主脚本到 ${INSTALL_DIR}/s ...${NC}"
 
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 if [[ -n "$SCRIPT_DIR" ]]; then
     cp "${SCRIPT_DIR}/s" "$TMP_DIR/s"
-    cp "${SCRIPT_DIR}/servers.conf.example" "$TMP_DIR/servers.conf.example"
 else
     echo -e "${DIM}  从 GitHub 下载...${NC}"
     curl -fsSL "${RAW_URL}/s" -o "$TMP_DIR/s"
-    curl -fsSL "${RAW_URL}/servers.conf.example" -o "$TMP_DIR/servers.conf.example"
 fi
 
 chmod +x "$TMP_DIR/s"
@@ -94,7 +92,19 @@ fi
 echo -e "${DIM}[4/4] 初始化配置 ...${NC}"
 mkdir -p "$HOME/.ssh-manager"
 if [[ ! -f "$HOME/.ssh-manager/servers.conf" ]]; then
-    cp "$TMP_DIR/servers.conf.example" "$HOME/.ssh-manager/servers.conf"
+    cat > "$HOME/.ssh-manager/servers.conf" <<'CONF'
+# ============================================
+# SSH Server Manager - 服务器配置文件
+# ============================================
+# 格式: 名称 | IP地址 | 端口 | 用户名 | 密码(可选) | 备注说明
+# 分组: 以 [分组名] 开头的行表示分组
+# 注释: 以 # 开头的行为注释
+# 密码留空则使用SSH Key登录
+# ============================================
+
+[默认分组]
+# example | 192.168.1.1 | 22 | root | yourpass | 示例服务器
+CONF
     echo -e "${GREEN}  ✓ 配置文件已创建: ~/.ssh-manager/servers.conf${NC}"
 else
     echo -e "${GREEN}  ✓ 配置文件已存在(保留原有配置)${NC}"
