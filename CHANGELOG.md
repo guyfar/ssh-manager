@@ -20,7 +20,6 @@ The format loosely follows Keep a Changelog.
 
 ### Changed
 
-- Replaced the old one-letter `s` entrypoint with `nk` as the recommended command.
-- Kept `s` as a compatibility alias instead of the primary implementation.
+- Replaced the old one-letter entrypoint with `nk` as the only supported command.
 - Updated installer and README to reflect the new brand and config layout.
 - Reworked config editing logic to avoid the previous macOS-only `sed -i ''` approach.

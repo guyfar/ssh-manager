@@ -19,7 +19,6 @@ BRANCH="${NOOK_BRANCH:-main}"
 RAW_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
 INSTALL_DIR="${NOOK_INSTALL_DIR:-/usr/local/bin}"
 PRIMARY_BIN="nk"
-LEGACY_ALIAS="s"
 XDG_CONFIG_ROOT="${XDG_CONFIG_HOME:-$HOME/.config}"
 CONFIG_DIR="$XDG_CONFIG_ROOT/nook"
 CONFIG_FILE="$CONFIG_DIR/servers.conf"
@@ -67,19 +66,6 @@ install_file() {
     fi
 }
 
-legacy_alias_is_safe() {
-    local target="${INSTALL_DIR}/${LEGACY_ALIAS}"
-    if [[ ! -e "$target" ]]; then
-        return 0
-    fi
-
-    if grep -qE 'SSH Server Manager|Nook - SSH jumpbox for humans|Legacy alias for Nook' "$target" 2>/dev/null; then
-        return 0
-    fi
-
-    return 1
-}
-
 ensure_install_dir() {
     if [[ -d "$INSTALL_DIR" ]]; then
         return 0
@@ -111,24 +97,14 @@ ensure_install_dir
 
 if [[ -n "$SCRIPT_DIR" ]]; then
     cp "${SCRIPT_DIR}/nk" "$TMP_DIR/nk"
-    cp "${SCRIPT_DIR}/s" "$TMP_DIR/s"
 else
     echo -e "${DIM}  download from GitHub...${NC}"
     curl -fsSL "${RAW_URL}/nk" -o "$TMP_DIR/nk"
-    curl -fsSL "${RAW_URL}/s" -o "$TMP_DIR/s"
 fi
 
-chmod +x "$TMP_DIR/nk" "$TMP_DIR/s"
+chmod +x "$TMP_DIR/nk"
 install_file "$TMP_DIR/nk" "${INSTALL_DIR}/nk"
 echo -e "${GREEN}  [ok] primary command installed: ${PRIMARY_BIN}${NC}"
-
-if legacy_alias_is_safe; then
-    install_file "$TMP_DIR/s" "${INSTALL_DIR}/s"
-    echo -e "${GREEN}  [ok] legacy alias installed: ${LEGACY_ALIAS}${NC}"
-else
-    echo -e "${YELLOW}  [skip] ${INSTALL_DIR}/${LEGACY_ALIAS} already exists and does not look like this project${NC}"
-    echo -e "${DIM}         keeping ${LEGACY_ALIAS} untouched to avoid command conflicts${NC}"
-fi
 
 # --- Step 2: 检查 fzf 和 sshpass ---
 echo -e "${DIM}[2/4] check fzf ...${NC}"

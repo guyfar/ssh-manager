@@ -44,12 +44,6 @@ curl -fsSL https://raw.githubusercontent.com/guyfar/nook-ssh/main/install.sh | b
 | `nk <关键词>` | 搜索并连接 |
 | `nk help` | 显示帮助 |
 
-兼容别名：
-
-| 命令 | 说明 |
-|------|------|
-| `s` | 旧入口，保留兼容，不再推荐作为主命令 |
-
 ## 配置格式
 
 ```conf
@@ -72,7 +66,7 @@ nk doctor
 ## 开发
 
 ```bash
-bash -n nk s install.sh
+bash -n nk install.sh
 ./nk help
 NOOK_INSTALL_DIR=/tmp/nook-bin XDG_CONFIG_HOME=/tmp/nook-xdg bash ./install.sh
 ```

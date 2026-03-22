@@ -8,7 +8,6 @@ set -euo pipefail
 
 BRAND_NAME="Nook"
 PRIMARY_CMD="nk"
-LEGACY_CMD="s"
 VERSION="1.1.0"
 
 XDG_CONFIG_ROOT="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -112,7 +111,6 @@ show_help() {
     echo ""
     echo -e "${BOLD}Brand${NC}"
     echo -e "  Primary command : ${PRIMARY_CMD}"
-    echo -e "  Legacy alias    : ${LEGACY_CMD} (not installed by default)"
     echo ""
     echo -e "${BOLD}Config${NC}"
     echo -e "  ${CONFIG_FILE}"
@@ -537,7 +535,6 @@ cmd_doctor() {
 
     printf "  %-18s %s\n" "Version" "${BRAND_NAME} ${VERSION}"
     printf "  %-18s %s\n" "Primary command" "${PRIMARY_CMD}"
-    printf "  %-18s %s\n" "Legacy alias" "${LEGACY_CMD}"
     printf "  %-18s %s\n" "Config dir" "${CONFIG_DIR}"
     printf "  %-18s %s\n" "Config file" "${CONFIG_FILE}"
     printf "  %-18s %s\n" "History file" "${HISTORY_FILE}"

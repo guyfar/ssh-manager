@@ -11,7 +11,7 @@ It gives your servers a clean home in one small Bash tool: searchable picker, gr
 - Short primary command: `nk`
 - Lightweight implementation with minimal dependencies
 - Built for personal and small-team SSH workflows
-- Keeps backward compatibility for the old `s` entrypoint without relying on a risky one-letter primary command
+- Uses one clear primary command instead of a risky one-letter shortcut
 
 ## Features
 
@@ -31,8 +31,6 @@ curl -fsSL https://raw.githubusercontent.com/guyfar/nook-ssh/main/install.sh | b
 After installation, the primary command is `nk`.
 
 Nook stores config in `~/.config/nook/` by default. If it finds an existing `~/.ssh-manager/` config, it migrates it automatically.
-
-The old `s` command is kept as a compatibility alias, but the installer will not overwrite an existing unrelated `s` binary on the host.
 
 ## Preview
 
@@ -66,12 +64,6 @@ $ nk
 | `nk <keyword>` | Search and connect |
 | `nk version` | Show version |
 | `nk help` | Show help |
-
-Legacy alias:
-
-| Command | Description |
-|------|------|
-| `s` | Old entrypoint kept for compatibility |
 
 ## Configuration
 
@@ -138,7 +130,7 @@ This prints version, config paths, server count, and dependency availability for
 
 ```bash
 # syntax check
-bash -n nk s install.sh
+bash -n nk install.sh
 
 # help
 ./nk help
@@ -153,7 +145,6 @@ See `CONTRIBUTING.md`, `CHANGELOG.md`, and `RELEASE_CHECKLIST.md` for project wo
 
 ```bash
 sudo rm /usr/local/bin/nk
-sudo rm /usr/local/bin/s
 rm -rf ~/.config/nook
 rm -rf ~/.ssh-manager
 ```

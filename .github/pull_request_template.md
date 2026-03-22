@@ -4,7 +4,7 @@ Describe the user-facing change.
 
 ## Verification
 
-- [ ] `bash -n nk s install.sh`
+- [ ] `bash -n nk install.sh`
 - [ ] `./nk help`
 - [ ] `./nk doctor`
 - [ ] Manual behavior checked

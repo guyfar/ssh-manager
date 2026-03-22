@@ -6,7 +6,6 @@ Use this before publishing a new Nook release.
 
 - Confirm the project name is consistently `Nook`.
 - Confirm `nk` is the documented primary command.
-- Confirm `s` is only described as a legacy compatibility alias.
 - Capture at least one fresh terminal screenshot or demo GIF.
 
 ## Repository
@@ -22,7 +21,7 @@ Use this before publishing a new Nook release.
 
 ## Quality
 
-- Run `bash -n nk s install.sh`
+- Run `bash -n nk install.sh`
 - Run `./nk help`
 - Run `./nk doctor`
 - Test install flow with:

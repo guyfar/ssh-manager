@@ -7,14 +7,13 @@ Thanks for contributing to Nook.
 - Keep the project lightweight and dependency-minimal.
 - Prefer portable Bash over shell tricks that only work on one platform.
 - Treat `nk` as the primary user-facing command.
-- Preserve backward compatibility for existing `s` users where it is low-cost.
 
 ## Local Checks
 
 Run these before opening a PR:
 
 ```bash
-bash -n nk s install.sh
+bash -n nk install.sh
 ./nk help
 ./nk version
 NOOK_INSTALL_DIR=/tmp/nook-bin XDG_CONFIG_HOME=/tmp/nook-xdg bash ./install.sh
