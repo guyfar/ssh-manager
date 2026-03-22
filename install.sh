@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================
-# SSH Server Manager - 安装脚本
-# 支持本地安装和远程一键安装
+# Nook - installer
+# Supports local install and remote bootstrap
 # ============================================
 
 set -euo pipefail
@@ -14,108 +14,179 @@ BOLD='\033[1m'
 DIM='\033[2m'
 NC='\033[0m'
 
-REPO="guyfar/ssh-manager"
-BRANCH="main"
+REPO="${NOOK_REPO:-guyfar/nook-ssh}"
+BRANCH="${NOOK_BRANCH:-main}"
 RAW_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
-INSTALL_DIR="/usr/local/bin"
+INSTALL_DIR="${NOOK_INSTALL_DIR:-/usr/local/bin}"
+PRIMARY_BIN="nk"
+LEGACY_ALIAS="s"
+XDG_CONFIG_ROOT="${XDG_CONFIG_HOME:-$HOME/.config}"
+CONFIG_DIR="$XDG_CONFIG_ROOT/nook"
+CONFIG_FILE="$CONFIG_DIR/servers.conf"
+LEGACY_CONFIG_DIR="$HOME/.ssh-manager"
 # Apple Silicon Mac 优先用 /opt/homebrew/bin
-if [[ -d "/opt/homebrew/bin" ]]; then
+if [[ -z "${NOOK_INSTALL_DIR:-}" && -d "/opt/homebrew/bin" ]]; then
     INSTALL_DIR="/opt/homebrew/bin"
 fi
 
-echo -e "${BOLD}${CYAN}SSH Server Manager - 安装程序${NC}"
+print_logo() {
+    echo -e "${CYAN}${BOLD}"
+    cat <<'EOF'
+    _   __            __
+   / | / /___  ____  / /__
+  /  |/ / __ \/ __ \/ //_/
+ / /|  / /_/ / /_/ / ,<
+/_/ |_/\____/\____/_/|_|
+EOF
+    echo -e "${NC}${DIM}  SSH jumpbox for humans${NC}"
+}
+
+write_default_config() {
+    cat > "$CONFIG_FILE" <<'CONF'
+# ============================================
+# Nook - server catalog
+# ============================================
+# Format : name | host | port | user | password(optional) | description
+# Group  : lines like [group-name]
+# Notes  : password empty means SSH key login
+# ============================================
+
+[default]
+# prod-web-01 | 1.2.3.4 | 22 | root | yourpass | production web node
+CONF
+}
+
+install_file() {
+    local src="$1" dest="$2"
+    if [[ -w "$INSTALL_DIR" ]]; then
+        cp "$src" "$dest"
+        chmod +x "$dest"
+    else
+        sudo cp "$src" "$dest"
+        sudo chmod +x "$dest"
+    fi
+}
+
+legacy_alias_is_safe() {
+    local target="${INSTALL_DIR}/${LEGACY_ALIAS}"
+    if [[ ! -e "$target" ]]; then
+        return 0
+    fi
+
+    if grep -qE 'SSH Server Manager|Nook - SSH jumpbox for humans|Legacy alias for Nook' "$target" 2>/dev/null; then
+        return 0
+    fi
+
+    return 1
+}
+
+ensure_install_dir() {
+    if [[ -d "$INSTALL_DIR" ]]; then
+        return 0
+    fi
+
+    if mkdir -p "$INSTALL_DIR" 2>/dev/null; then
+        return 0
+    fi
+
+    sudo mkdir -p "$INSTALL_DIR"
+}
+
+print_logo
 echo ""
 
 # --- 判断是本地安装还是远程安装 ---
 SCRIPT_DIR=""
-if [[ -f "$(dirname "$0")/s" ]] 2>/dev/null; then
+if [[ -f "$(dirname "$0")/nk" ]] 2>/dev/null; then
     SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 fi
 
-# --- Step 1: 安装主脚本 ---
-echo -e "${DIM}[1/4] 安装主脚本到 ${INSTALL_DIR}/s ...${NC}"
+# --- Step 1: install primary binary ---
+echo -e "${DIM}[1/4] install ${PRIMARY_BIN} into ${INSTALL_DIR}/${PRIMARY_BIN} ...${NC}"
 
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+ensure_install_dir
+
 if [[ -n "$SCRIPT_DIR" ]]; then
+    cp "${SCRIPT_DIR}/nk" "$TMP_DIR/nk"
     cp "${SCRIPT_DIR}/s" "$TMP_DIR/s"
 else
-    echo -e "${DIM}  从 GitHub 下载...${NC}"
+    echo -e "${DIM}  download from GitHub...${NC}"
+    curl -fsSL "${RAW_URL}/nk" -o "$TMP_DIR/nk"
     curl -fsSL "${RAW_URL}/s" -o "$TMP_DIR/s"
 fi
 
-chmod +x "$TMP_DIR/s"
-if [[ -w "$INSTALL_DIR" ]]; then
-    cp "$TMP_DIR/s" "${INSTALL_DIR}/s"
+chmod +x "$TMP_DIR/nk" "$TMP_DIR/s"
+install_file "$TMP_DIR/nk" "${INSTALL_DIR}/nk"
+echo -e "${GREEN}  [ok] primary command installed: ${PRIMARY_BIN}${NC}"
+
+if legacy_alias_is_safe; then
+    install_file "$TMP_DIR/s" "${INSTALL_DIR}/s"
+    echo -e "${GREEN}  [ok] legacy alias installed: ${LEGACY_ALIAS}${NC}"
 else
-    sudo cp "$TMP_DIR/s" "${INSTALL_DIR}/s"
-    sudo chmod +x "${INSTALL_DIR}/s"
+    echo -e "${YELLOW}  [skip] ${INSTALL_DIR}/${LEGACY_ALIAS} already exists and does not look like this project${NC}"
+    echo -e "${DIM}         keeping ${LEGACY_ALIAS} untouched to avoid command conflicts${NC}"
 fi
-echo -e "${GREEN}  ✓ 主脚本已安装${NC}"
 
 # --- Step 2: 检查 fzf 和 sshpass ---
-echo -e "${DIM}[2/4] 检查 fzf ...${NC}"
+echo -e "${DIM}[2/4] check fzf ...${NC}"
 if command -v fzf &>/dev/null; then
-    echo -e "${GREEN}  ✓ fzf 已安装${NC}"
+    echo -e "${GREEN}  [ok] fzf is installed${NC}"
 else
-    echo -e "${YELLOW}  fzf 未安装${NC}"
+    echo -e "${YELLOW}  [warn] fzf is not installed${NC}"
     if command -v brew &>/dev/null; then
-        read -rp "  是否自动安装 fzf? [Y/n]: " install_fzf
+        read -r -p "  Install fzf now? [Y/n]: " install_fzf
         if [[ ! "$install_fzf" =~ ^[nN] ]]; then
             brew install fzf
-            echo -e "${GREEN}  ✓ fzf 安装完成${NC}"
+            echo -e "${GREEN}  [ok] fzf installed${NC}"
         fi
     else
-        echo -e "${DIM}  请手动安装: brew install fzf${NC}"
-        echo -e "${DIM}  (无fzf也可使用，体验稍弱)${NC}"
+        echo -e "${DIM}  install manually: brew install fzf${NC}"
+        echo -e "${DIM}  Nook works without it, but the picker is better with fzf${NC}"
     fi
 fi
 
 # --- Step 3: 检查 sshpass ---
-echo -e "${DIM}[3/4] 检查 sshpass ...${NC}"
+echo -e "${DIM}[3/4] check sshpass ...${NC}"
 if command -v sshpass &>/dev/null; then
-    echo -e "${GREEN}  ✓ sshpass 已安装${NC}"
+    echo -e "${GREEN}  [ok] sshpass is installed${NC}"
 else
-    echo -e "${YELLOW}  sshpass 未安装(密码登录需要)${NC}"
+    echo -e "${YELLOW}  [warn] sshpass is not installed (only needed for password login)${NC}"
     if command -v brew &>/dev/null; then
-        read -rp "  是否自动安装 sshpass? [Y/n]: " install_sshpass
+        read -r -p "  Install sshpass now? [Y/n]: " install_sshpass
         if [[ ! "$install_sshpass" =~ ^[nN] ]]; then
             brew install hudochenkov/sshpass/sshpass 2>/dev/null || \
             brew install esolitos/ipa/sshpass 2>/dev/null || \
-            echo -e "${YELLOW}  自动安装失败，请手动安装${NC}"
+            echo -e "${YELLOW}  automatic install failed, please install it manually${NC}"
         fi
     fi
 fi
 
 # --- Step 4: 初始化配置 ---
-echo -e "${DIM}[4/4] 初始化配置 ...${NC}"
-mkdir -p "$HOME/.ssh-manager"
-if [[ ! -f "$HOME/.ssh-manager/servers.conf" ]]; then
-    cat > "$HOME/.ssh-manager/servers.conf" <<'CONF'
-# ============================================
-# SSH Server Manager - 服务器配置文件
-# ============================================
-# 格式: 名称 | IP地址 | 端口 | 用户名 | 密码(可选) | 备注说明
-# 分组: 以 [分组名] 开头的行表示分组
-# 注释: 以 # 开头的行为注释
-# 密码留空则使用SSH Key登录
-# ============================================
-
-[默认分组]
-# example | 192.168.1.1 | 22 | root | yourpass | 示例服务器
-CONF
-    echo -e "${GREEN}  ✓ 配置文件已创建: ~/.ssh-manager/servers.conf${NC}"
+echo -e "${DIM}[4/4] initialize config ...${NC}"
+mkdir -p "$CONFIG_DIR"
+if [[ -f "${LEGACY_CONFIG_DIR}/servers.conf" && ! -f "$CONFIG_FILE" ]]; then
+    cp "${LEGACY_CONFIG_DIR}/servers.conf" "$CONFIG_FILE"
+    [[ -f "${LEGACY_CONFIG_DIR}/.history" ]] && cp "${LEGACY_CONFIG_DIR}/.history" "${CONFIG_DIR}/.history"
+    echo -e "${GREEN}  [ok] migrated existing config from ${LEGACY_CONFIG_DIR}${NC}"
+elif [[ ! -f "$CONFIG_FILE" ]]; then
+    write_default_config
+    echo -e "${GREEN}  [ok] created config: ${CONFIG_FILE}${NC}"
 else
-    echo -e "${GREEN}  ✓ 配置文件已存在(保留原有配置)${NC}"
+    echo -e "${GREEN}  [ok] config already exists: ${CONFIG_FILE}${NC}"
 fi
-chmod 600 "$HOME/.ssh-manager/servers.conf"
+chmod 600 "$CONFIG_FILE"
 
 echo ""
-echo -e "${GREEN}${BOLD}✓ 安装完成!${NC}"
+echo -e "${GREEN}${BOLD}[ok] install complete${NC}"
 echo ""
-echo -e "${BOLD}快速开始:${NC}"
-echo -e "  1. 添加服务器:     ${CYAN}s add${NC}"
-echo -e "  2. 选择并登录:     ${CYAN}s${NC}"
-echo -e "  3. 配置免密登录:   ${CYAN}s key${NC}"
-echo -e "  4. 查看帮助:       ${CYAN}s help${NC}"
+echo -e "${BOLD}Quick start${NC}"
+echo -e "  1. Add a server:       ${CYAN}${PRIMARY_BIN} add${NC}"
+echo -e "  2. Pick and connect:   ${CYAN}${PRIMARY_BIN}${NC}"
+echo -e "  3. Configure SSH key:  ${CYAN}${PRIMARY_BIN} key${NC}"
+echo -e "  4. Run diagnostics:    ${CYAN}${PRIMARY_BIN} doctor${NC}"
+echo -e "  5. Help:               ${CYAN}${PRIMARY_BIN} help${NC}"
+echo ""
+echo -e "${DIM}Config path: ${CONFIG_FILE}${NC}"
